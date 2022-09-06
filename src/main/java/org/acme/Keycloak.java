@@ -28,7 +28,7 @@ public class Keycloak {
 
     private static final String KEYCLOAK_VERSION = "19.0.1"; // 999-SNAPSHOT to test the current main branch
     private static final String ORG_KEYCLOAK = "org.keycloak";
-    private static final String KEYCLOAK_QUARKUS_SERVER = "keycloak-quarkus-parent";
+    private static final String KEYCLOAK_QUARKUS_SERVER = "keycloak-quarkus-server";
 
     private static final String KEYCLOAK_QUARKUS_DIST = "keycloak-quarkus-dist";
     private static final String IO_QUARKUS = "io.quarkus";
