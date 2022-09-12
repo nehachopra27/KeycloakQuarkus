@@ -1,5 +1,7 @@
 package org.acme;
 
+import java.io.File;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
@@ -7,10 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 import io.quarkus.bootstrap.BootstrapException;
-import io.quarkus.bootstrap.app.AugmentAction;
-import io.quarkus.bootstrap.app.AugmentResult;
-import io.quarkus.bootstrap.app.CuratedApplication;
-import io.quarkus.bootstrap.app.QuarkusBootstrap;
+import io.quarkus.bootstrap.app.*;
 import io.quarkus.bootstrap.model.ApplicationModel;
 import io.quarkus.bootstrap.resolver.AppModelResolverException;
 import io.quarkus.bootstrap.resolver.BootstrapAppModelResolver;
@@ -21,9 +20,13 @@ import io.quarkus.bootstrap.workspace.DefaultArtifactSources;
 import io.quarkus.bootstrap.workspace.SourceDir;
 import io.quarkus.bootstrap.workspace.WorkspaceModule;
 import io.quarkus.bootstrap.workspace.WorkspaceModuleId;
-import io.quarkus.maven.dependency.ArtifactKey;
+import io.quarkus.fs.util.ZipUtils;
+import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.Dependency;
 import io.quarkus.maven.dependency.DependencyBuilder;
+import org.apache.commons.io.FileUtils;
+import org.eclipse.aether.artifact.DefaultArtifact;
+import org.eclipse.aether.resolution.ArtifactResult;
 
 public class Keycloak {
 
@@ -44,11 +47,11 @@ public class Keycloak {
     public static void main(Map<String, String> args) throws Exception {
         Path path = Paths.get(System.getProperty("user.dir"), "target", "kc");
         System.setProperty("kc.home.dir", path.toAbsolutePath().toString());
-        Keycloak.newInstance().setDatabase("oracle").build();
+        Keycloak.newInstance().setDatabase(args.get())[0]).build();
 
     }
     
-    public void build() throws AppModelResolverException, BootstrapException {
+    public void build() throws AppModelResolverException, BootstrapException, IOException {
         System.out.println("Building Keycloak");
 
         final MavenArtifactResolver mavenResolver = MavenArtifactResolver.builder()
@@ -80,6 +83,14 @@ public class Keycloak {
             AugmentAction action = curated.createAugmentor();
             AugmentResult outcome = action.createProductionApplication();
         }
+        Path contentDir = appRoot.resolve("src").resolve("main").resolve("resources").resolve("content");
+        IoUtils.copy(contentDir,distDir);
+
+        ArtifactResult result = mavenResolver.resolve(new DefaultArtifact(Constants.ORG_KEYCLOAK,Constants.KEYCLOAK_CLIENT_CLI_DIST,"","zip", Constants.KEYCLOAK_VERSION));
+        File keycloakServerAppCliJar = result.getArtifact().getFile();
+        ZipUtils.unzip(keycloakServerAppCliJar.toPath(),appRoot.resolve("target").resolve("zip"));
+        IoUtils.copy(appRoot.resolve("target").resolve("zip").resolve("keycloak-client-tools"),distDir);
+        FileUtils.deleteDirectory(appRoot.resolve("target").resolve("zip").toFile());
 
         System.out.println("Done!");
     }
@@ -90,7 +101,7 @@ public class Keycloak {
                 .setBuildDir(target)
                 .addDependencyConstraint(Dependency.pomImport(Constants.ORG_KEYCLOAK, "keycloak-quarkus-parent", Constants.KEYCLOAK_VERSION))
                 .addDependency(Dependency.of(Constants.ORG_KEYCLOAK, Constants.KEYCLOAK_QUARKUS_SERVER, Constants.KEYCLOAK_VERSION))
-                //.addDependency(Dependency.of(ORG_KEYCLOAK, KEYCLOAK_QUARKUS_DIST, KEYCLOAK_VERSION))
+                .addDependency(Dependency.of(Constants.ORG_KEYCLOAK, Constants.KEYCLOAK_QUARKUS_SERVER_APP, Constants.KEYCLOAK_VERSION))
                 .build();
         return module;
     }
