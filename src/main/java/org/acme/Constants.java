@@ -12,6 +12,10 @@ public interface Constants {
     String KEYCLOAK_QUARKUS_DIST = "keycloak-quarkus-dist";
     String IO_QUARKUS = "io.quarkus";
     String QUARKUS_JDBC_PREFIX = "quarkus-jdbc-";
-    String DATABASE="dev-file";
+    String DATABASE = "dev-file";
+
+    String OPTION_CACHE = "--cache";
+    String OPTION_DB = "--db";
+    String OPTION_HOST_NAME_STRICT = "--hostname-strict";
 
 }
