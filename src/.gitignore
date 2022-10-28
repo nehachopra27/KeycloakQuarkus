@@ -11,7 +11,7 @@ release.properties
 .project
 .classpath
 .settings/
-bin/
+
 
 # IntelliJ
 .idea
