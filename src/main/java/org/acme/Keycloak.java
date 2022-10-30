@@ -1,20 +1,9 @@
 package org.acme;
 
-import io.quarkus.bootstrap.classloading.ClassPathElement;
 import io.quarkus.bootstrap.classloading.PathTreeClassPathElement;
 import io.quarkus.bootstrap.classloading.QuarkusClassLoader;
-import io.quarkus.bootstrap.model.ApplicationModel;
-import io.quarkus.bootstrap.resolver.BootstrapAppModelResolver;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.util.IoUtils;
-import io.quarkus.bootstrap.workspace.ArtifactSources;
-import io.quarkus.bootstrap.workspace.DefaultArtifactSources;
-import io.quarkus.bootstrap.workspace.SourceDir;
-import io.quarkus.bootstrap.workspace.WorkspaceModule;
-import io.quarkus.bootstrap.workspace.WorkspaceModuleId;
-import io.quarkus.fs.util.ZipUtils;
-import io.quarkus.maven.dependency.Dependency;
-import io.quarkus.maven.dependency.DependencyBuilder;
 import io.quarkus.paths.DirectoryPathTree;
 import io.quarkus.paths.FilteredArchivePathTree;
 import io.quarkus.paths.PathFilter;
@@ -22,13 +11,18 @@ import io.quarkus.paths.PathTree;
 import io.quarkus.runtime.annotations.QuarkusMain;
 import io.quarkus.runtime.util.ClassPathUtils;
 import java.io.File;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Arrays;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Stream;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.resolution.ArtifactResult;
 
@@ -39,7 +33,10 @@ public class Keycloak {
         final Map<String, String> parsedArgs = parseCommandLineArgs(args);
         Path path = Paths.get(System.getProperty("user.dir"), "target", "kc");
         System.setProperty("kc.home.dir", path.toAbsolutePath().toString());
-        Keycloak.newInstance().setDatabase(parsedArgs.get(Option.DB.getCommandLineName())).build();
+        Keycloak.newInstance()
+                .setDatabase(parsedArgs.get(Option.DB.getCommandLineName()))
+                .setVersion(parsedArgs.get(Option.VERSION.getCommandLineName()))
+                .build();
     }
 
     private static Map<String, String> parseCommandLineArgs(String[] args) {
@@ -60,6 +57,7 @@ public class Keycloak {
         return parsed;
     }
 
+    private String keycloakVersion;
     private String database;
 
     public static Keycloak newInstance() {
@@ -69,9 +67,15 @@ public class Keycloak {
     public Keycloak setDatabase(String db) {
         System.out.println(
                 "Possible db values are: dev-file, dev-mem, mariadb, mssql,mysql, oracle, postgres. Default: dev-file.");
-        String currentDB = validateDB(db);
-        System.out.println("Currently using database: " + currentDB);
-        database = currentDB;
+        database = validateDB(db);
+        return this;
+    }
+
+    public Keycloak setVersion(String version) {
+        if (version == null || version.isBlank()) {
+            version = Constants.KEYCLOAK_VERSION;
+        }
+        this.keycloakVersion = version;
         return this;
     }
 
@@ -81,44 +85,72 @@ public class Keycloak {
      * @throws Exception in case of a failure
      */
     public void build() throws Exception {
-        System.out.println("Building Keycloak");
+        System.out.println("Building Keycloak " + keycloakVersion);
+        System.out.println("For database " + database);
 
         // configure paths
         Path appRoot = IoUtils.mkdirs(Path.of("").normalize().toAbsolutePath());
-        Path configDir = appRoot.resolve("src").resolve("main").resolve("resources").resolve("keycloak");
-        Path distDir = appRoot.resolve("target").resolve("dist");
+        Path distDir = appRoot.resolve("keycloak");
         IoUtils.recursiveDelete(distDir);
         IoUtils.mkdirs(distDir);
 
-        // configure server dependencies
-        final WorkspaceModule module = getServerWithoutExtraJdbc(configDir, distDir);
-
         // initialize Maven artifact resolver
-        final MavenArtifactResolver mavenResolver = MavenArtifactResolver.builder()
-                .setWorkspaceDiscovery(false)
-                .build();
-
-        // initialize Quarkus application model resolver
-        final BootstrapAppModelResolver appModelResolver = new BootstrapAppModelResolver(mavenResolver);
-
-        // resolve Keycloak server Quarkus application model
-        final ApplicationModel appModel = appModelResolver.resolveModel(module);
+        final MavenArtifactResolver mavenResolver = KeycloakBuilder.getMavenArtifactResolver();
 
         // build the Keycloak Quarkus application
-        buildKeycloakQuarkusApp(appRoot, appModel);
+        buildKeycloakQuarkusApp(appRoot, distDir, mavenResolver);
 
-        // add the missing content
-        Path contentDir = appRoot.resolve("src").resolve("main").resolve("resources").resolve("content");
-        IoUtils.copy(contentDir, distDir);
+        // add resources from the content directory
+        ClassPathUtils.consumeAsPaths("content", p -> {
+            try {
+                IoUtils.copy(p, distDir);
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to copy " + p + " to " + distDir, e);
+            }
+        });
 
         ArtifactResult result = mavenResolver.resolve(new DefaultArtifact(Constants.ORG_KEYCLOAK,
-                Constants.KEYCLOAK_CLIENT_CLI_DIST, "", "zip", Constants.KEYCLOAK_VERSION));
-        File keycloakServerAppCliJar = result.getArtifact().getFile();
-        ZipUtils.unzip(keycloakServerAppCliJar.toPath(), appRoot.resolve("target").resolve("zip"));
-        IoUtils.copy(appRoot.resolve("target").resolve("zip").resolve("keycloak-client-tools"), distDir);
-        IoUtils.recursiveDelete(appRoot.resolve("target").resolve("zip"));
+                Constants.KEYCLOAK_CLIENT_CLI_DIST, "", "zip", keycloakVersion));
+        final File keycloakServerAppCliZip = result.getArtifact().getFile();
+        PathTree.ofArchive(keycloakServerAppCliZip.toPath()).accept(Constants.KEYCLOAK_CLIENT_TOOLS, visit -> {
+            if (visit == null) {
+                throw new IllegalStateException(
+                        "Failed to locate " + Constants.KEYCLOAK_CLIENT_TOOLS + " in " + keycloakServerAppCliZip);
+            }
+            try {
+                IoUtils.copy(visit.getPath(), distDir);
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to copy Keycloak CLI scripts", e);
+            }
+        });
+
+        setExecutePermissions(distDir);
 
         System.out.println("Done!");
+    }
+
+    private void setExecutePermissions(Path distDir) throws IOException {
+        final Path binDir = distDir.resolve("bin");
+        if (!Files.isDirectory(binDir)) {
+            return;
+        }
+        try (Stream<Path> stream = Files.list(binDir)) {
+            stream.forEach(p -> {
+                if (p.getFileName().toString().endsWith(".sh")) {
+                    try {
+                        Files.setPosixFilePermissions(p, Set.of(
+                                PosixFilePermission.OWNER_READ,
+                                PosixFilePermission.OWNER_WRITE,
+                                PosixFilePermission.OWNER_EXECUTE,
+                                PosixFilePermission.GROUP_READ,
+                                PosixFilePermission.GROUP_WRITE,
+                                PosixFilePermission.GROUP_EXECUTE));
+                    } catch (IOException e) {
+                        throw new UncheckedIOException("Failed to set execute permissions of " + p, e);
+                    }
+                }
+            });
+        }
     }
 
     /**
@@ -128,113 +160,56 @@ public class Keycloak {
      * @param workingDir working directory
      * @param appModel resolved Keycloak Quarkus application model
      */
-    private void buildKeycloakQuarkusApp(Path workingDir, final ApplicationModel appModel) {
+    private void buildKeycloakQuarkusApp(Path workingDir, Path distDir, MavenArtifactResolver mavenResolver) {
+
         final Path builderClassesLocation = ClassPathUtils
                 .toLocalPath(KeycloakBuilder.class.getProtectionDomain().getCodeSource().getLocation());
         final PathTree keycloakBuilderPathTree;
         if (Files.isDirectory(builderClassesLocation)) {
-            keycloakBuilderPathTree = new DirectoryPathTree(builderClassesLocation,
-                    PathFilter.forIncludes(List.of(KeycloakBuilder.class.getName().replace('.', '/') + ".class")));
+            keycloakBuilderPathTree = new DirectoryPathTree(builderClassesLocation, getClassFilter());
         } else {
-            keycloakBuilderPathTree = new FilteredArchivePathTree(builderClassesLocation,
-                    PathFilter.forIncludes(List.of(KeycloakBuilder.class.getName().replace('.', '/') + ".class")));
+            keycloakBuilderPathTree = new FilteredArchivePathTree(builderClassesLocation, getClassFilter());
         }
 
         final ClassLoader cl = Thread.currentThread().getContextClassLoader();
         final QuarkusClassLoader.Builder keycloakClBuilder = QuarkusClassLoader
                 .builder("Keycloak Builder Class Loader", cl, false)
                 .addElement(new PathTreeClassPathElement(keycloakBuilderPathTree, true));
-        appModel.getDependencies().forEach(d -> {
-            if (!d.getArtifactId().equals("quarkus-bootstrap-app-model")) {
-                keycloakClBuilder.addElement(ClassPathElement.fromDependency(d));
+
+        final URL keycloakBuilderResources = Thread.currentThread().getContextClassLoader().getResource("keycloak-builder");
+        ClassPathUtils.consumeAsPath(keycloakBuilderResources, keycloakBuilderPath -> {
+            try (QuarkusClassLoader keycloakCl = keycloakClBuilder.build()) {
+                Thread.currentThread().setContextClassLoader(keycloakCl);
+                keycloakCl.loadClass(KeycloakBuilder.class.getName())
+                        .getMethod(KeycloakBuilder.CREATE_QUARKUS_APPLICATION,
+                                Path.class, // working dir
+                                Path.class, // dist dir
+                                String.class, // keycloak version
+                                String.class // database
+                )
+                        .invoke(null, keycloakBuilderPath, distDir, keycloakVersion, database);
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to create Keycloak server", e);
+            } finally {
+                Thread.currentThread().setContextClassLoader(cl);
             }
         });
-
-        try (QuarkusClassLoader keycloakCl = keycloakClBuilder.build()) {
-            Thread.currentThread().setContextClassLoader(keycloakCl);
-            keycloakCl.loadClass(KeycloakBuilder.class.getName())
-                    .getMethod(KeycloakBuilder.CREATE_QUARKUS_APPLICATION, Path.class, ApplicationModel.class)
-                    .invoke(null, workingDir, appModel);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to create Keycloak server", e);
-        } finally {
-            Thread.currentThread().setContextClassLoader(cl);
-        }
     }
 
-    private static WorkspaceModule getDefaultServer(Path target) {
-        final WorkspaceModule module = WorkspaceModule.builder()
-                .setModuleId(WorkspaceModuleId.of("io.playground", "keycloak-app", "1"))
-                .setBuildDir(target)
-                .addDependencyConstraint(
-                        Dependency.pomImport(Constants.ORG_KEYCLOAK, "keycloak-quarkus-parent", Constants.KEYCLOAK_VERSION))
-                .addDependency(
-                        Dependency.of(Constants.ORG_KEYCLOAK, Constants.KEYCLOAK_QUARKUS_SERVER, Constants.KEYCLOAK_VERSION))
-                .addDependency(Dependency.of(Constants.ORG_KEYCLOAK, Constants.KEYCLOAK_QUARKUS_SERVER_APP,
-                        Constants.KEYCLOAK_VERSION))
-                .build();
-        return module;
-    }
-
-    private WorkspaceModule getServerWithoutExtraJdbc(Path configDir, Path buildDir) {
-        // customize the keycloak-quarkus-server dependency
-        final DependencyBuilder quarkusServerBuilder = DependencyBuilder.newInstance()
-                .setGroupId(Constants.ORG_KEYCLOAK)
-                .setArtifactId(Constants.KEYCLOAK_QUARKUS_SERVER)
-                .setVersion(Constants.KEYCLOAK_VERSION)
-                .addExclusion(Constants.IO_QUARKUS, "quarkus-bootstrap-core")
-                .addExclusion(Constants.IO_QUARKUS, "quarkus-bootstrap-maven-resolver")
-                .addExclusion(Constants.IO_QUARKUS, "quarkus-bootstrap-gradle-resolver");
-        List<String> AvailableDBs = Arrays.asList("postgresql", "mariadb", "mssql", "mysql", "oracle");
-        for (String dbs : AvailableDBs) {
-            if (!dbs.equalsIgnoreCase(database)) {
-                System.out.println("Removing " + dbs);
-                excludeJdbcDriver(dbs, quarkusServerBuilder);
-            }
-        }
-        /*
-         * excludeJdbcDriver("h2", quarkusServerBuilder); required for some reason
-         * excludeJdbcDriver("postgresql", quarkusServerBuilder);
-         * excludeJdbcDriver("mariadb", quarkusServerBuilder);
-         * excludeJdbcDriver("mssql", quarkusServerBuilder);
-         * excludeJdbcDriver("mysql", quarkusServerBuilder);
-         * excludeJdbcDriver("oracle", quarkusServerBuilder);
-         */
-
-        // configure the Keycloak server application
-        final WorkspaceModule module = WorkspaceModule.builder()
-                .setModuleId(WorkspaceModuleId.of("io.playground", "keycloak-app", "1"))
-                .setBuildDir(buildDir)
-                // enforce the Keycloak Quarkus version constraints
-                // .addDependencyConstraint(Dependency.pomImport(IO_QUARKUS, "quarkus-bom", "999-SNAPSHOT")) to upgrade Quarkus to the current main branch
-                // .addDependencyConstraint(Dependency.of("org.liquibase", "liquibase-core", "4.8.0")) to restore the original liquibase-core version used by Keycloak
-                .addDependencyConstraint(
-                        Dependency.pomImport(Constants.ORG_KEYCLOAK, "keycloak-quarkus-parent", Constants.KEYCLOAK_VERSION))
-                .addDependencyConstraint(quarkusServerBuilder.build())
-                .addDependency(DependencyBuilder.newInstance()
-                        .setGroupId(Constants.ORG_KEYCLOAK)
-                        .setArtifactId(Constants.KEYCLOAK_QUARKUS_SERVER)
-                        .build())
-                .addArtifactSources(new DefaultArtifactSources(ArtifactSources.MAIN,
-                        List.of(), List.of(SourceDir.of(configDir, configDir))))
-                .build();
-        return module;
-    }
-
-    private static void excludeJdbcDriver(String name, DependencyBuilder builder) {
-        builder.addExclusion(Constants.IO_QUARKUS, Constants.QUARKUS_JDBC_PREFIX + name);
-        builder.addExclusion(Constants.IO_QUARKUS, Constants.QUARKUS_JDBC_PREFIX + name + "-deployment");
+    private static PathFilter getClassFilter() {
+        return PathFilter.forIncludes(List.of(
+                KeycloakBuilder.class.getName().replace('.', '/') + ".class"));
     }
 
     public static String validateDB(String dbVendor) {
-        if (!Validate(dbVendor)) {
+        if (!validate(dbVendor)) {
             System.out.println("Entered selection doesn't matches the possible types. Using default");
             dbVendor = "dev-file";
         }
         return dbVendor;
     }
 
-    public static Boolean Validate(String dbVendor) {
+    public static Boolean validate(String dbVendor) {
         String[] validDBs = { "dev-file", "dev-mem", "mariadb", "mssql", "mysql", "oracle", "postgres" };
         boolean isValidDB = false;
         for (String db : validDBs) {
