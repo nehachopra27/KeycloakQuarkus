@@ -7,7 +7,8 @@ public enum Option {
 
     CACHE("--cache"),
     DB("--db"),
-    HOSTNAME_STRICT("--hostname-strict");
+    HOSTNAME_STRICT("--hostname-strict"),
+    VERSION("--version");
 
     private static final Map<String, Option> options;
     static {
