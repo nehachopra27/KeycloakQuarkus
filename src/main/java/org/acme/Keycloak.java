@@ -16,7 +16,6 @@ import java.io.UncheckedIOException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.HashMap;
 import java.util.List;
@@ -31,12 +30,18 @@ public class Keycloak {
 
     public static void main(String[] args) throws Exception {
         final Map<String, String> parsedArgs = parseCommandLineArgs(args);
-        Path path = Paths.get(System.getProperty("user.dir"), "target", "kc");
-        System.setProperty("kc.home.dir", path.toAbsolutePath().toString());
+        String appRootTest = parsedArgs.get(Option.APPROOT.getCommandLineName());
+        Path appRoot;
+        if (appRootTest == null) {
+            appRoot = Path.of("").normalize().toAbsolutePath();
+        } else {
+            appRoot = Path.of(appRootTest).normalize().toAbsolutePath();
+        }
+        System.out.println("ApppROOT: " + appRoot);
         Keycloak.newInstance()
                 .setDatabase(parsedArgs.get(Option.DB.getCommandLineName()))
                 .setVersion(parsedArgs.get(Option.VERSION.getCommandLineName()))
-                .build();
+                .build(appRoot);
     }
 
     private static Map<String, String> parseCommandLineArgs(String[] args) {
@@ -84,12 +89,12 @@ public class Keycloak {
      *
      * @throws Exception in case of a failure
      */
-    public void build() throws Exception {
+    public void build(Path appRoot) throws Exception {
         System.out.println("Building Keycloak " + keycloakVersion);
         System.out.println("For database " + database);
 
         // configure paths
-        Path appRoot = IoUtils.mkdirs(Path.of("").normalize().toAbsolutePath());
+        appRoot = IoUtils.mkdirs(appRoot);
         Path distDir = appRoot.resolve("keycloak");
         IoUtils.recursiveDelete(distDir);
         IoUtils.mkdirs(distDir);
