@@ -5,6 +5,7 @@ import java.util.Map;
 
 public enum Option {
 
+    APPROOT("--app-root"),
     CACHE("--cache"),
     DB("--db"),
     HOSTNAME_STRICT("--hostname-strict"),
