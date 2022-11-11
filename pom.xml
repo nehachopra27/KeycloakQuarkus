@@ -84,7 +84,7 @@
             <dependency>
               <artifactId>quarkus-ide-config</artifactId>
               <groupId>io.quarkus</groupId>
-              <version>999-SNAPSHOT</version>
+              <version>${quarkus.platform.version}</version>
             </dependency>
           </dependencies>
           <configuration>
