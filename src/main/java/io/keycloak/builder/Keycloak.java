@@ -1,4 +1,4 @@
-package org.acme;
+package io.keycloak.builder;
 
 import io.quarkus.bootstrap.classloading.PathTreeClassPathElement;
 import io.quarkus.bootstrap.classloading.QuarkusClassLoader;

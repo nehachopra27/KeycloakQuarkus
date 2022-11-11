@@ -1,4 +1,4 @@
-package org.acme;
+package io.keycloak.builder;
 
 import java.util.HashMap;
 import java.util.Map;

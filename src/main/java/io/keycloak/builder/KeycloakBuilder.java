@@ -1,4 +1,4 @@
-package org.acme;
+package io.keycloak.builder;
 
 import io.quarkus.bootstrap.app.AugmentAction;
 import io.quarkus.bootstrap.app.AugmentResult;
