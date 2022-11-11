@@ -1,4 +1,4 @@
-package org.acme;
+package io.keycloak.builder;
 
 import static io.quarkus.bootstrap.util.PropertyUtils.isWindows;
 

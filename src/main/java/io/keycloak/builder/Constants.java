@@ -1,4 +1,4 @@
-package org.acme;
+package io.keycloak.builder;
 
 public interface Constants {
 

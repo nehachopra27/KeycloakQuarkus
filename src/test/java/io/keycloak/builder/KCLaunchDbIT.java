@@ -1,4 +1,4 @@
-package org.acme;
+package io.keycloak.builder;
 
 import static io.quarkus.test.devmode.util.DevModeTestUtils.getHttpResponse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
