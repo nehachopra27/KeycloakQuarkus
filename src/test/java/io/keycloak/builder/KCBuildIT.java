@@ -2,20 +2,21 @@ package io.keycloak.builder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import io.quarkus.test.junit.main.Launch;
+import io.quarkus.test.junit.main.LaunchResult;
+import io.quarkus.test.junit.main.QuarkusMainIntegrationTest;
 import java.io.*;
 import java.nio.file.Path;
 import java.util.Arrays;
 import org.apache.commons.io.filefilter.WildcardFileFilter;
 import org.junit.jupiter.api.*;
-import io.quarkus.test.junit.main.Launch;
-import io.quarkus.test.junit.main.LaunchResult;
-import io.quarkus.test.junit.main.QuarkusMainIntegrationTest;
 
 @QuarkusMainIntegrationTest
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class KCBuildIT extends Utils {
     @Test
-    @Launch({"--app-root", "target/keycloakBuild"})
+    @Launch({ "--app-root", "target/keycloakBuild" })
     @Order(1)
     public void distDefaultSuccess(LaunchResult result) throws IOException {
         assertTrue(result.getOutput().contains("For database dev-file"));
@@ -24,7 +25,7 @@ public class KCBuildIT extends Utils {
     }
 
     @Test
-    @Launch({"--app-root", "target/keycloakOracle", "--db", "oracle"})
+    @Launch({ "--app-root", "target/keycloakOracle", "--db", "oracle" })
     @Order(2)
     public void distOracleBuilds(LaunchResult result) {
         assertTrue(result.getOutput().contains("For database oracle"));
