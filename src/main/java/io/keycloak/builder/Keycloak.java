@@ -4,8 +4,6 @@ import io.quarkus.bootstrap.classloading.PathTreeClassPathElement;
 import io.quarkus.bootstrap.classloading.QuarkusClassLoader;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.util.IoUtils;
-import io.quarkus.paths.DirectoryPathTree;
-import io.quarkus.paths.FilteredArchivePathTree;
 import io.quarkus.paths.PathFilter;
 import io.quarkus.paths.PathTree;
 import io.quarkus.runtime.annotations.QuarkusMain;
@@ -169,12 +167,7 @@ public class Keycloak {
 
         final Path builderClassesLocation = ClassPathUtils
                 .toLocalPath(KeycloakBuilder.class.getProtectionDomain().getCodeSource().getLocation());
-        final PathTree keycloakBuilderPathTree;
-        if (Files.isDirectory(builderClassesLocation)) {
-            keycloakBuilderPathTree = new DirectoryPathTree(builderClassesLocation, getClassFilter());
-        } else {
-            keycloakBuilderPathTree = new FilteredArchivePathTree(builderClassesLocation, getClassFilter());
-        }
+        final PathTree keycloakBuilderPathTree = PathTree.ofDirectoryOrArchive(builderClassesLocation, getClassFilter());
 
         final ClassLoader cl = Thread.currentThread().getContextClassLoader();
         final QuarkusClassLoader.Builder keycloakClBuilder = QuarkusClassLoader

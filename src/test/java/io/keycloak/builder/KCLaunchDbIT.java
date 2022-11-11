@@ -3,15 +3,14 @@ package io.keycloak.builder;
 import static io.quarkus.test.devmode.util.DevModeTestUtils.getHttpResponse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.quarkus.test.junit.main.Launch;
+import io.quarkus.test.junit.main.LaunchResult;
+import io.quarkus.test.junit.main.QuarkusMainIntegrationTest;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import io.quarkus.test.junit.main.Launch;
-import io.quarkus.test.junit.main.LaunchResult;
-import io.quarkus.test.junit.main.QuarkusMainIntegrationTest;
-
 import org.junit.jupiter.api.*;
 
 @QuarkusMainIntegrationTest
@@ -21,7 +20,7 @@ public class KCLaunchDbIT extends Utils {
     Path invokablePath;
 
     @Test
-    @Launch({"--app-root", "target/keycloakBuild", "--db", "mysql"})
+    @Launch({ "--app-root", "target/keycloakBuild", "--db", "mysql" })
     @Order(1)
     public void testSuccessfulBuildWithoutDB(LaunchResult result) throws IOException {
         binPath = Path.of("target/keycloakBuild/keycloak").resolve("bin");
