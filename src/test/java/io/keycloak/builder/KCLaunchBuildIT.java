@@ -14,8 +14,7 @@ import java.util.List;
 import org.junit.jupiter.api.*;
 
 @QuarkusMainIntegrationTest
-@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-public class KCLaunchDbIT extends Utils {
+public class KCLaunchBuildIT extends Utils {
     Path binPath;
     Path invokablePath;
 
@@ -37,7 +36,6 @@ public class KCLaunchDbIT extends Utils {
             }
         }
     }
-
     @AfterAll
     public static void tearDown() throws IOException {
         //Delete all the dists created above
