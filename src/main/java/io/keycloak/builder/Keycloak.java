@@ -16,6 +16,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -25,6 +26,9 @@ import org.eclipse.aether.resolution.ArtifactResult;
 
 @QuarkusMain
 public class Keycloak {
+
+    private static final Set<String> SUPPORTED_DATABASES = Set.of("dev-file", "dev-mem", "mariadb", "mssql", "mysql", "oracle",
+            "postgres");
 
     public static void main(String[] args) throws Exception {
         final Map<String, String> parsedArgs = parseCommandLineArgs(args);
@@ -69,7 +73,7 @@ public class Keycloak {
 
     public Keycloak setDatabase(String db) {
         System.out.println(
-                "Possible db values are: dev-file, dev-mem, mariadb, mssql,mysql, oracle, postgres. Default: dev-file.");
+                "Possible db values are: dev-file, dev-mem, mariadb, mssql, mysql, oracle, postgres. Default: dev-file.");
         database = validateDB(db);
         return this;
     }
@@ -199,25 +203,25 @@ public class Keycloak {
                 KeycloakBuilder.class.getName().replace('.', '/') + ".class"));
     }
 
-    public static String validateDB(String dbVendor) {
+    private static String validateDB(String dbVendor) {
+        if (dbVendor == null || dbVendor.isEmpty()) {
+            return Constants.DEFAULT_DATABASE;
+        }
         if (!validate(dbVendor)) {
-            System.out.println("Entered selection doesn't matches the possible types. Using default");
-            dbVendor = "dev-file";
+            final StringBuilder sb = new StringBuilder();
+            sb.append("Entered selection '").append(dbVendor).append("' is not found among supported values: ");
+            final Iterator<String> i = SUPPORTED_DATABASES.iterator();
+            sb.append(i.next());
+            while (i.hasNext()) {
+                sb.append(", ").append(i.next());
+            }
+            throw new IllegalArgumentException(sb.toString());
         }
         return dbVendor;
     }
 
-    public static Boolean validate(String dbVendor) {
-        String[] validDBs = { "dev-file", "dev-mem", "mariadb", "mssql", "mysql", "oracle", "postgres" };
-        boolean isValidDB = false;
-        for (String db : validDBs) {
-            if (db.equals(dbVendor)) {
-                isValidDB = true;
-                System.out.println("Entered selection is a valid type");
-                break;
-            }
-        }
-        return isValidDB;
+    private static boolean validate(String dbVendor) {
+        return SUPPORTED_DATABASES.contains(dbVendor);
     }
 
 }

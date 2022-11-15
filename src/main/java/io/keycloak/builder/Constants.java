@@ -14,7 +14,7 @@ public interface Constants {
     String IO_QUARKUS = "io.quarkus";
     String QUARKUS_BOOTSTRAP_VERSION = "2.13.3.Final"; // this should be removed once Keycloak moves to 2.13
     String QUARKUS_JDBC_PREFIX = "quarkus-jdbc-";
-    String DATABASE = "dev-file";
+    String DEFAULT_DATABASE = "dev-file";
 
     String OPTION_CACHE = "--cache";
     String OPTION_DB = "--db";
