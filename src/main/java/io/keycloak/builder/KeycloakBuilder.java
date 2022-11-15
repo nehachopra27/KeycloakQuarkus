@@ -21,14 +21,20 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.CodeSource;
-import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 public class KeycloakBuilder {
 
     static final String CREATE_QUARKUS_APPLICATION = "createQuarkusApplication";
 
-    private static final List<String> AVAILABLE_DBS = List.of("postgresql", "mariadb", "mssql", "mysql", "oracle");
+    // map Keycloak db value to the corresponding Quarkus extension artifactId
+    private static final Map<String, String> KEYCLOAK_DB_TO_QUARKUS_EXT = Map.of(
+            "postgres", Constants.QUARKUS_JDBC_PREFIX + "postgresql",
+            "mariadb", Constants.QUARKUS_JDBC_PREFIX + "mariadb",
+            "mssql", Constants.QUARKUS_JDBC_PREFIX + "mssql",
+            "mysql", Constants.QUARKUS_JDBC_PREFIX + "mysql",
+            "oracle", Constants.QUARKUS_JDBC_PREFIX + "oracle");
 
     static MavenArtifactResolver getMavenArtifactResolver() throws BootstrapMavenException {
         return MavenArtifactResolver.builder()
@@ -102,10 +108,10 @@ public class KeycloakBuilder {
                 .setArtifactId(Constants.KEYCLOAK_QUARKUS_SERVER)
                 .setVersion(keycloakVersion);
 
-        for (String dbs : AVAILABLE_DBS) {
-            if (!dbs.equalsIgnoreCase(database)) {
-                System.out.println("Removing " + dbs);
-                excludeJdbcDriver(dbs, quarkusServerBuilder);
+        for (Map.Entry<String, String> dbOption : KEYCLOAK_DB_TO_QUARKUS_EXT.entrySet()) {
+            if (!dbOption.getKey().equalsIgnoreCase(database)) {
+                System.out.println("Removing " + dbOption.getValue());
+                excludeJdbcDriver(dbOption.getValue(), quarkusServerBuilder);
             }
         }
 
@@ -131,7 +137,7 @@ public class KeycloakBuilder {
     }
 
     private static void excludeJdbcDriver(String name, DependencyBuilder builder) {
-        builder.addExclusion(Constants.IO_QUARKUS, Constants.QUARKUS_JDBC_PREFIX + name);
-        builder.addExclusion(Constants.IO_QUARKUS, Constants.QUARKUS_JDBC_PREFIX + name + "-deployment");
+        builder.addExclusion(Constants.IO_QUARKUS, name);
+        builder.addExclusion(Constants.IO_QUARKUS, name + "-deployment");
     }
 }
